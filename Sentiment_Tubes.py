@@ -1146,6 +1146,12 @@ plt.show()
 
 # >---
 
+# In[ ]:
+
+
+
+
+
 # ### **Analisis Sentimen dengan Indo-BERT**
 
 # Di project ini, kami menggunakan model indolem/indobert-base-uncased. Model Indo-BERT adalah salah satu model BERT yang dilatih dalam bahasa Indonesia.  Model ini didapatkan dari https://indolem.github.io/IndoBERT/. Dengan detail:
@@ -1235,7 +1241,7 @@ def mapping_function(input_ids, attention_masks, token_type_ids, label):
 # 2. Validation set (10%) : untuk memberikan evaluasi yang tidak bias selama proses pelatihan untuk membantu kita membuat keputusan. Bisa mencegah overfitting saat kita memantau loss pada training set dan validation set. Jika training loss terus menurun sementara validation loss mulai naik, ini adalah tanda jelas bahwa model mulai "menghafal" data latih dan tidak lagi belajar pola yang umum. Berdasarkan titik ini, kita bisa menghentikan pelatihan lebih awal untuk mendapatkan model dengan kemampuan generalisasi terbaik.
 # 3. Test Data (20%) : untuk memberikan penilaian akhir yang paling objektif terhadap model
 # 
-# * Pembagian menjadi 3 dataset dikarenakan kita menggunakan Training Set untuk mengajar model dan Validation Set untuk semua proses tuning dan pemilihan model terbaik. Dengan begitu, Test Set yang tidak pernah tersentuh sama sekali dapat memberikan skor akhir yang paling baik dan objektif tentang seberapa baik performa model pada data yang benar-benar bar
+# * Pembagian menjadi 3 dataset dikarenakan kita menggunakan Training Set untuk mengajar model dan Validation Set untuk semua proses tuning dan pemilihan model terbaik. Dengan begitu, Test Set yang tidak pernah tersentuh sama sekali dapat memberikan skor akhir yang paling baik dan objektif tentang seberapa baik performa model pada data yang benar-benar baru
 
 # In[84]:
 
@@ -1358,6 +1364,17 @@ label2id_sentiment = {'Positif': 0, 'Netral': 1, 'Negatif': 2}
 label2id_aspek = {'ENERGY_ACCESS': 0, 'ENVIRONMENTAL_IMPACT': 1, 'GOVERNMENT_POLICY': 2, 'ENERGY_TECHNOLOGY': 3, 'OTHER':4} 
 
 
+# **Pembuatan Custom Dataset untuk IndoBERT**
+# 
+# Kelas IndoBERTDataset dirancang untuk mempersiapkan data teks dan label agar sesuai dengan format input yang diharapkan oleh model BERT di PyTorch. Kelas ini mengelola:
+# 
+# 1. Tokenisasi Teks: Mengubah teks menjadi token dan ID numerik.
+# 2. Padding/Truncation: Menyesuaikan panjang sequence token agar seragam (berdasarkan max_len).
+# 3. Penambahan Special Token: Menambahkan token khusus BERT ([CLS], [SEP]) yang esensial untuk model Transformer.
+# 4. Pembuatan Attention Mask dan Token Type IDs: Memastikan model memproses input dengan benar, mengabaikan padding token.
+# 5. Konversi Label ke Numerik: Mengubah label sentimen dan aspek dari string menjadi ID numerik.
+# 6. Pembungkusan dalam Tensor PyTorch: Menyiapkan semua input dalam format tensor yang tepat untuk feed ke model.
+
 # In[124]:
 
 
@@ -1397,6 +1414,8 @@ class IndoBERTDataset(Dataset):
 
 
 
+# **Pembuatan Data Loader (menyajikan data dalam bentuk batch ke model selama training)**
+
 # In[125]:
 
 
@@ -1413,6 +1432,11 @@ def create_dataloaders(splits, tokenizer, batch_size=16):
 
     return train_loader, val_loader, test_loader
 
+
+# ### **Model Indo-BERT Multitask**
+# Multi-Task Learning (MTL) adalah pendekatan dalam machine learning di mana satu model dilatih untuk menyelesaikan beberapa tugas terkait secara bersamaan, bukan satu per satu secara terpisah.
+# 
+# Dalam project ini bertujuan untuk mengklasifikasikan sentimen dan aspek topik dari teks/dataset yang sama. Kedua tugas ini adalah tugas Natural Language Processing (NLP) yang saling terkait dan berbagi informasi kontekstual yang sama dari teks input. Maka dari itu, perlu pendekatan Multi-Task Learning ini.
 
 # In[126]:
 
@@ -1442,6 +1466,8 @@ class MultiTaskIndoBERT(nn.Module):
 
         return sentiment_logits, aspek_logits
 
+
+# **Fungsi Pelatihan Model**
 
 # In[127]:
 
@@ -1477,6 +1503,11 @@ def train_model(model, train_loader, val_loader, device, epochs=3, lr=2e-5):
         avg_loss = total_loss / len(train_loader)
         print(f"Epoch {epoch+1}/{epochs}, Training Loss: {avg_loss:.4f}")
 
+
+# **Fungsi Evaluasi Model dan Pelaporan Klasifikasi**
+# 
+# 
+# Fungsi ini mengevaluasi kinerja model yang sudah terlatih pada dataset yang diberikan (biasanya validation atau test set). Kode ini mengumpulkan semua prediksi model dan label sebenarnya, kemudian menghasilkan serta mencetak Classification Report terperinci untuk sentimen dan aspek. Classification Report ini mencakup metrik seperti precision, recall, dan f1-score yang penting untuk memahami performa model per kelas.
 
 # In[137]:
 
@@ -1515,6 +1546,8 @@ def evaluate_model(model, dataloader, device):
     return y_true_sent, y_pred_sent, y_true_asp, y_pred_asp  # ← Tambahkan ini
 
 
+# **Proses Utama Pelatihan, Evaluasi, dan Penyimpanan Model**
+
 # In[138]:
 
 
@@ -1538,54 +1571,19 @@ print("✅ Model berhasil disimpan sebagai indobert_multitask.pth")
 
 
 
+# Secara keseluruhan, model mencapai akurasi tinggi (88% sentimen, 83% aspek), menunjukkan kemampuan baik dalam mengklasifikasikan sentimen dan aspek. Meskipun demikian, terdapat ruang perbaikan pada recall untuk kelas minoritas seperti Netral (sentimen) dan beberapa kategori aspek (GOVERNMENT_POLICY, OTHER).
+
 # In[139]:
 
 
 true_sentiments, pred_sentiments, true_aspeks, pred_aspeks = evaluate_model(model, test_loader, config.DEVICE)
 
 
-# In[140]:
+# ### **Perbandingan hasil dari analisis data Ground truth (LLM) dan IndoBERT**
 
+# **Pemuatan dan Pemetaan Data Berlabel dari LLM (Claude) - mengonversi label sentimen dan aspek yang berupa teks (string) dari Claude menjadi ID numerik yang konsisten dengan yang digunakan oleh model IndoBERT**
 
-import pandas as pd
-import numpy as np
-from collections import Counter
-
-# Load dataset
-df = pd.read_csv("labeling_claude.csv", sep=';', encoding='utf-8')  
-print("🚀 INDOBERT SENTIMENT ANALYSIS FINE-TUNING")
-print("=" * 60)
-
-# Informasi dataset
-print("📊 Loading labeled dataset...")
-print(f"✅ Dataset loaded: {df.shape}")
-print(f"✅ Columns: {list(df.columns)}\n")
-
-# Panjang teks
-text_lengths = df['Tweet_Text'].apply(len)
-word_counts = df['Tweet_Text'].apply(lambda x: len(str(x).split()))
-
-print("📈 DATASET ANALYSIS:")
-print("-" * 50)
-print(f"Text length - Mean: {text_lengths.mean():.1f}, Max: {text_lengths.max()}")
-print(f"Word count - Mean: {word_counts.mean():.1f}, Max: {word_counts.max()}")
-long_texts = (text_lengths > 512).sum()
-print(f"Texts > 512 chars: {long_texts} ({100 * long_texts / len(df):.1f}%)\n")
-
-# Distribusi Sentimen
-print("🎯 SENTIMENT DISTRIBUTION:")
-sentiment_counts = Counter(df['Sentimen'])
-for label, count in sentiment_counts.items():
-    print(f"  {label.capitalize()}: {count} ({100 * count / len(df):.1f}%)")
-
-# Distribusi Aspek
-print("\n🎯 ASPEK DISTRIBUTION:")
-aspek_counts = Counter(df['Aspek'])
-for label, count in aspek_counts.items():
-    print(f"  {label.upper()}: {count} ({100 * count / len(df):.1f}%)")
-
-
-# In[142]:
+# In[162]:
 
 
 import pandas as pd
@@ -1607,7 +1605,9 @@ llm_sentiments = df_llm['Sentimen'].map(sentiment_map).tolist()
 llm_aspeks = df_llm['Aspek'].map(aspek_map).tolist()
 
 
-# In[145]:
+# **Pemetaan Label Sentimen dan Aspek dari Teks ke Numerik**
+
+# In[163]:
 
 
 sentiment_map = {'Negatif': 0, 'Netral': 1, 'Positif': 2}
@@ -1623,6 +1623,8 @@ llm_sentiments = llm_test['Sentimen'].map(sentiment_map).tolist()
 llm_aspeks = llm_test['Aspek'].map(aspek_map).tolist()
 
 
+# **Menjalankan evaluasi model**
+
 # In[152]:
 
 
@@ -1631,4 +1633,118 @@ true_sentiments, pred_sentiments, true_aspeks, pred_aspeks = evaluate_model(
     test_loader,
     config.DEVICE
 )
+
+
+# **Pemuatan, Pemetaan, dan Pembersihan Label Ground Truth dari LLM (Claude)**
+
+# In[ ]:
+
+
+import pandas as pd
+from sklearn.model_selection import train_test_split
+
+df_llm = pd.read_csv('labeling_claude.csv', sep=';')
+
+# Ini adalah mapping dari string Claude ke ID numerik yang Anda gunakan di Indobert
+label2id_sentiment = {'Positif': 0, 'Netral': 1, 'Negatif': 2}
+label2id_aspek = {'ENERGY_ACCESS': 0, 'ENVIRONMENTAL_IMPACT': 1, 'GOVERNMENT_POLICY': 2, 'ENERGY_TECHNOLOGY': 3, 'OTHER':4}
+
+# Konversi label Claude ke ID numerik
+df_llm['sentiment_claude_id'] = df_llm['Sentimen'].map(label2id_sentiment)
+df_llm['aspek_claude_id'] = df_llm['Aspek'].map(label2id_aspek)
+
+# Hapus baris dengan NaN jika ada label yang tidak ditemukan di mapping
+df_llm.dropna(subset=['sentiment_claude_id', 'aspek_claude_id'], inplace=True)
+
+
+# **Pembagian Dataset Menjadi Train, Validation, dan Test Set**
+
+# In[ ]:
+
+
+# Pisahkan fitur (clean_text) dan label (sentiment_claude_id, aspek_claude_id)
+texts = data_label['Tweet_Text'].tolist() 
+sentiments_gt = df_llm['sentiment_claude_id'].tolist()
+aspeks_gt = df_llm['aspek_claude_id'].tolist()
+
+# Pembagian data: Train (70%), Test (20%), Validation (10%)
+train_texts, temp_texts, train_sentiments, temp_sentiments, train_aspeks, temp_aspeks = train_test_split(
+    texts, sentiments_gt, aspeks_gt, test_size=(config.TEST_SIZE + config.VAL_SIZE), random_state=config.RANDOM_STATE, stratify=sentiments_gt # Stratify jika ada imbalance
+)
+val_texts, test_texts, val_sentiments, test_sentiments, val_aspeks, test_aspeks = train_test_split(
+    temp_texts, temp_sentiments, temp_aspeks, test_size=config.TEST_SIZE/(config.TEST_SIZE + config.VAL_SIZE), random_state=config.RANDOM_STATE, stratify=temp_sentiments # Stratify lagi
+)
+
+# Kini train_texts, val_texts, test_texts memiliki label ground truth dari Claude
+
+
+# **Pencetakan Laporan Klasifikasi Sentimen dan Aspek**
+# 
+# Membandingkan label sebenarnya (ground truth dari Claude) dengan label yang diprediksi oleh model IndoBERT untuk sentimen dan aspek. Hasilnya memberikan metrik kunci seperti precision, recall, dan f1-score untuk setiap kelas, serta metrik agregat.
+
+# In[158]:
+
+
+from sklearn.metrics import classification_report
+
+print("IndoBERT Sentiment Classification Report (vs. Claude as Ground Truth):")
+print(classification_report(true_sentiments, pred_sentiments, target_names=label2id_sentiment.keys()))
+
+print("\nIndoBERT Aspek Classification Report (vs. Claude as Ground Truth):")
+print(classification_report(true_aspeks, pred_aspeks, target_names=label2id_aspek.keys()))
+
+
+# **Visualisasi Persentase Kesepakatan IndoBERT vs. LLM (Claude)**
+
+# In[ ]:
+
+
+import matplotlib.pyplot as plt
+import numpy as np
+from sklearn.metrics import accuracy_score
+
+
+# Hitung persentase kesepakatan (accuracy)
+agreement_sentiment = accuracy_score(true_sentiments, pred_sentiments) * 100
+agreement_aspek = accuracy_score(true_aspeks, pred_aspeks) * 100
+
+# Data untuk bar chart
+labels = ['Sentimen', 'Aspek']
+agreement_percentages = [agreement_sentiment, agreement_aspek]
+
+# Buat bar chart
+plt.figure(figsize=(8, 6))
+bars = plt.bar(labels, agreement_percentages, color=['skyblue', 'lightcoral'])
+
+# Tambahkan nilai persentase di atas setiap bar
+for bar in bars:
+    yval = bar.get_height()
+    plt.text(bar.get_x() + bar.get_width()/2, yval + 0.5, f'{yval:.2f}%', ha='center', va='bottom')
+
+plt.ylim(0, 100) # Batasi sumbu Y dari 0 sampai 100%
+plt.ylabel('Persentase Kesepakatan (%)')
+plt.title('Persentase Kesepakatan Indobert vs. LLM (Claude) sebagai Ground Truth')
+plt.grid(axis='y', linestyle='--', alpha=0.7)
+plt.show()
+
+# Cetak juga nilai persentasenya
+print(f"Persentase Kesepakatan Sentimen: {agreement_sentiment:.2f}%")
+print(f"Persentase Kesepakatan Aspek: {agreement_aspek:.2f}%")
+
+
+# **Insight dan Interpretasi Model IndoBERT untuk Analisis Aspek-Sentimen Data Scraping X**
+# * Analisis hasil sentimen
+# 
+# Model menunjukkan kinerja yang sangat baik dalam klasifikasi sentimen secara keseluruhan dengan akurasi 88%. Performa untuk kelas Negatif (F1-score 0.92) dan Positif (F1-score 0.91) sangat kuat, didukung oleh nilai precision dan recall yang tinggi. Namun, terdapat tantangan pada klasifikasi sentimen Netral, yang memiliki recall terendah (0.68). Hal ini mengindikasikan bahwa model cenderung melewatkan sekitar 32% dari sampel yang sebenarnya berlabel Netral.
+# 
+# * Analisis hasil aspek
+# 
+# Untuk klasifikasi aspek, model mencapai akurasi keseluruhan 83%, menunjukkan kinerja yang baik mengingat kompleksitas tugas multi-kelas. Model sangat unggul dalam mengidentifikasi aspek ENVIRONMENTAL_IMPACT (F1-score 0.90) dengan recall yang hampir sempurna (0.99). Aspek ENERGY_ACCESS dan OTHER menunjukkan precision yang sempurna (1.00), artinya setiap kali model memprediksi kelas ini, prediksinya selalu benar.
+# 
+# Namun, recall untuk ENERGY_ACCESS (0.81) dan OTHER (0.67) relatif lebih rendah, menunjukkan model melewatkan beberapa instansi aspek-aspek tersebut. Aspek GOVERNMENT_POLICY juga menunjukkan recall yang lebih rendah (0.68). Sementara itu, ENERGY_TECHNOLOGY menunjukkan kinerja seimbang dengan F1-score 0.71.
+
+# In[ ]:
+
+
+
 
